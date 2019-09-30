@@ -594,110 +594,15 @@ class WindowSpecification(object):
 
         return control_name_map
 
-    def print_control_identifiers(self, depth=None, filename=None):
-        """
-        Prints the 'identifiers'
 
-        Prints identifiers for the control and for its descendants to
-        a depth of **depth** (the whole subtree if **None**).
+    def print_ctrl_ids(self, **kwargs):
+        """Alias for `print_control_identifiers()`"""
+        return self.print_control_identifiers(**kwargs)
 
-        .. note:: The identifiers printed by this method have been made
-               unique. So if you have 2 edit boxes, they won't both have "Edit"
-               listed in their identifiers. In fact the first one can be
-               referred to as "Edit", "Edit0", "Edit1" and the 2nd should be
-               referred to as "Edit2".
-        """
-        if depth is None:
-            depth = sys.maxsize
-        # Wrap this control
-        this_ctrl = self.__resolve_control(self.criteria)[-1]
+    def dump_tree(self, **kwargs):
+        """Alias for `print_control_identifiers()`"""
+        return self.print_control_identifiers(**kwargs)
 
-        # Create a list of this control and all its descendants
-        all_ctrls = [this_ctrl, ] + this_ctrl.descendants()
-
-        # Create a list of all visible text controls
-        txt_ctrls = [ctrl for ctrl in all_ctrls if ctrl.can_be_label and ctrl.is_visible() and ctrl.window_text()]
-
-        # Build a dictionary of disambiguated list of control names
-        name_ctrl_id_map = findbestmatch.UniqueDict()
-        for index, ctrl in enumerate(all_ctrls):
-            ctrl_names = findbestmatch.get_control_names(ctrl, all_ctrls, txt_ctrls)
-            for name in ctrl_names:
-                name_ctrl_id_map[name] = index
-
-        # Swap it around so that we are mapped off the control indices
-        ctrl_id_name_map = {}
-        for name, index in name_ctrl_id_map.items():
-            ctrl_id_name_map.setdefault(index, []).append(name)
-
-        def print_identifiers(ctrls, current_depth=1, log_func=print):
-            """Recursively print ids for ctrls and their descendants in a tree-like format"""
-            if len(ctrls) == 0 or current_depth > depth:
-                return
-
-            indent = (current_depth - 1) * u"   | "
-            for ctrl in ctrls:
-                try:
-                    ctrl_id = all_ctrls.index(ctrl)
-                except ValueError:
-                    continue
-                ctrl_text = ctrl.window_text()
-                if ctrl_text:
-                    # transform multi-line text to one liner
-                    ctrl_text = ctrl_text.replace('\n', r'\n').replace('\r', r'\r')
-
-                output = indent + u'\n'
-                output += indent + u"{class_name} - '{text}'    {rect}\n"\
-                    "".format(class_name=ctrl.friendly_class_name(),
-                              text=ctrl_text,
-                              rect=ctrl.rectangle())
-                output += indent + u'{}'.format(ctrl_id_name_map[ctrl_id])
-
-                title = ctrl_text
-                class_name = ctrl.class_name()
-                auto_id = None
-                control_type = None
-                if hasattr(ctrl.element_info, 'automation_id'):
-                    auto_id = ctrl.element_info.automation_id
-                if hasattr(ctrl.element_info, 'control_type'):
-                    control_type = ctrl.element_info.control_type
-                    if control_type:
-                        class_name = None  # no need for class_name if control_type exists
-                    else:
-                        control_type = None # if control_type is empty, still use class_name instead
-                criteria_texts = []
-                if title:
-                    criteria_texts.append(u'title="{}"'.format(title))
-                if class_name:
-                    criteria_texts.append(u'class_name="{}"'.format(class_name))
-                if auto_id:
-                    criteria_texts.append(u'auto_id="{}"'.format(auto_id))
-                if control_type:
-                    criteria_texts.append(u'control_type="{}"'.format(control_type))
-                if title or class_name or auto_id:
-                    output += u'\n' + indent + u'child_window(' + u', '.join(criteria_texts) + u')'
-
-                if six.PY3:
-                    log_func(output)
-                else:
-                    log_func(output.encode(locale.getpreferredencoding(), errors='backslashreplace'))
-
-                print_identifiers(ctrl.children(), current_depth + 1, log_func)
-
-        if filename is None:
-            print("Control Identifiers:")
-            print_identifiers([this_ctrl, ])
-        else:
-            log_file = codecs.open(filename, "w", locale.getpreferredencoding())
-
-            def log_func(msg):
-                log_file.write(str(msg) + os.linesep)
-            log_func("Control Identifiers:")
-            print_identifiers([this_ctrl, ], log_func=log_func)
-            log_file.close()
-
-    print_ctrl_ids = print_control_identifiers
-    dump_tree = print_control_identifiers
 
 cur_item = 0
 

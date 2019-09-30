@@ -32,9 +32,12 @@
 """Provides functions for iterating and finding windows/elements"""
 from __future__ import unicode_literals
 
+import locale
+import os
 import re
 import ctypes
 import six
+import sys
 
 from . import win32functions
 from . import win32structures
@@ -71,6 +74,132 @@ class ElementAmbiguousError(Exception):
 
     """There was more then one element that matched"""
     pass
+
+
+# =========================================================================
+def print_control_identifiers(control, depth=None, filename=None, log_func=None):
+    """
+    Prints the 'identifiers' of a control.
+
+    Prints identifiers for the control and for its descendants to
+    a depth of **depth** (the whole subtree if **None**).
+
+    By default, identifiers are printed to stdout. A filename may be provided to output the identifiers to,
+    else a `log_func` callback accepting
+
+    .. note:: The identifiers printed by this method have been made
+           unique. So if you have 2 edit boxes, they won't both have "Edit"
+           listed in their identifiers. In fact the first one can be
+           referred to as "Edit", "Edit0", "Edit1" and the 2nd should be
+           referred to as "Edit2".
+    """
+
+    if depth is None:
+        depth = sys.maxsize
+
+    if hasattr(control, "wrapper_object"):
+        # Resolve this control
+        this_ctrl = control.wrapper_object()
+    else:
+        # Already a wrapper object
+        this_ctrl = control
+
+        # Create a list of this control and all its descendants
+    all_ctrls = [this_ctrl, ] + this_ctrl.descendants()
+
+    # Create a list of all visible text controls
+    txt_ctrls = [ctrl for ctrl in all_ctrls if ctrl.can_be_label and ctrl.is_visible() and ctrl.window_text()]
+
+    # Build a dictionary of disambiguated list of control names
+    name_ctrl_id_map = findbestmatch.UniqueDict()
+    for index, ctrl in enumerate(all_ctrls):
+        ctrl_names = findbestmatch.get_control_names(ctrl, all_ctrls, txt_ctrls)
+        for name in ctrl_names:
+            name_ctrl_id_map[name] = index
+
+    # Swap it around so that we are mapped off the control indices
+    ctrl_id_name_map = {}
+    for name, index in name_ctrl_id_map.items():
+        ctrl_id_name_map.setdefault(index, []).append(name)
+
+    def print_identifiers(ctrls, current_depth=1, log_func=None):
+        """Recursively print ids for ctrls and their descendants in a tree-like format"""
+        if len(ctrls) == 0 or current_depth > depth:
+            return
+        assert log_func, log_func
+
+        indent = (current_depth - 1) * u"   | "
+        for ctrl in ctrls:
+            try:
+                ctrl_id = all_ctrls.index(ctrl)
+            except ValueError:
+                continue
+            ctrl_text = ctrl.window_text()
+            if ctrl_text:
+                # transform multi-line text to one liner
+                ctrl_text = ctrl_text.replace('\n', r'\n').replace('\r', r'\r')
+
+            output = indent + u'\n'
+            output += indent + u"{class_name} - '{text}'    {rect}\n" \
+                               "".format(class_name=ctrl.friendly_class_name(),
+                                         text=ctrl_text,
+                                         rect=ctrl.rectangle())
+            output += indent + u'{}'.format(ctrl_id_name_map[ctrl_id])
+
+            title = ctrl_text
+            class_name = ctrl.class_name()
+            auto_id = None
+            control_type = None
+            if hasattr(ctrl.element_info, 'automation_id'):
+                auto_id = ctrl.element_info.automation_id
+            if hasattr(ctrl.element_info, 'control_type'):
+                control_type = ctrl.element_info.control_type
+                if control_type:
+                    class_name = None  # no need for class_name if control_type exists
+                else:
+                    control_type = None  # if control_type is empty, still use class_name instead
+            criteria_texts = []
+            if title:
+                criteria_texts.append(u'title="{}"'.format(title))
+            if class_name:
+                criteria_texts.append(u'class_name="{}"'.format(class_name))
+            if auto_id:
+                criteria_texts.append(u'auto_id="{}"'.format(auto_id))
+            if control_type:
+                criteria_texts.append(u'control_type="{}"'.format(control_type))
+            if title or class_name or auto_id:
+                output += u'\n' + indent + u'child_window(' + u', '.join(criteria_texts) + u')'
+
+            log_func(output)
+
+            print_identifiers(ctrl.children(), current_depth + 1, log_func)
+
+    def unicode_to_bytes(msg):
+        return msg.encode(locale.getpreferredencoding(), errors='backslashreplace')
+
+    if log_func is not None:
+        log_func("Control Identifiers:")
+        print_identifiers([this_ctrl, ], log_func=log_func)
+
+    elif filename is None:
+
+        def log_func(msg):
+            bytestring = unicode_to_bytes(msg)
+            print(bytestring)
+
+        print("Control Identifiers:")
+        print_identifiers([this_ctrl, ], log_func=log_func)
+
+    else:
+        log_file = open(filename, "wb")
+
+        def log_func(msg):
+            bytestring = unicode_to_bytes(msg)
+            log_file.write(bytestring + os.linesep)
+
+        log_func("Control Identifiers:")
+        print_identifiers([this_ctrl, ], log_func=log_func)
+        log_file.close()
 
 
 #=========================================================================
